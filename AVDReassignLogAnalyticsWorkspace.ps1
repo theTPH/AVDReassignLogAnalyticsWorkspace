@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Checks if all AVD VMs in a Ressourcegroup are connected to the right LogAnalyticsWorkspace(LAW) and reassigns them if needed.
 .DESCRIPTION
@@ -6,8 +6,10 @@
 	If a machine is not running it is put into maintenance mode, started, reassigned, stoped and then put out of maintenance mode.
 	This script is meant to be run in an Azure Runbook. The script will use the AutomationAccount System Identity for Authentication. 
 	Therefore the System Identity needs the following RBAC rigths in the Azure tennant:
-		- Read on Subscription
-		- ..still to be determined
+		- Read on KeyVault
+		- Virtual Machine Contributor on VMRessourceGroup
+		- Log Analytics Contributor on LogAnalyticsWorkspace
+		- Desktop Virtualization Contributor on Hostpool
 	The following Powershell modules are required:
 		- Az.Accounts
 		- Az.Compute
@@ -37,7 +39,6 @@
 	- check and revise how VMs that are offline and not part of the hostpool are handeld
 	- parameter "Extension" can probaply be removed 
 	- maybe reduce parameters with more automatic generation eg. get hostpool from vm
-    - check needed Azure RBAC roles and document them
 #>
 
 Param (

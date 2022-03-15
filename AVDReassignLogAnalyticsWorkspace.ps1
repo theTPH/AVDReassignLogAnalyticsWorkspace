@@ -163,8 +163,8 @@ function Check-LAWAssignment
     return $IsConnected
 }
 
- Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object 
-{
+
+Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
     $provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running
     $IsConnected = Check-LAWAssignment -LAWResourceGroup $LAWResourceGroup -LAWName $LAWName -ExtensionName $Extension -VMName $_.Name -VMResourceGroup $_.ResourceGroupName
     if($IsConnected -eq $false)

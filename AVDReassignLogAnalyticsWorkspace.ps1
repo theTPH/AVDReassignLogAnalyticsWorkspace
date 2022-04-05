@@ -49,7 +49,7 @@ Param (
 	[Parameter (Mandatory = $true)]
 	[String] $LAWName,
 	[Parameter (Mandatory = $true)]
-	[Array] $WorkspaceID,
+	[String] $WorkspaceID,
 	[Parameter (Mandatory = $true)]
 	[String] $LAWResourceGroup,
 	[Parameter (Mandatory = $true)]
@@ -64,6 +64,7 @@ Param (
 	[String] $Extension = "MicrosoftMonitoringAgent"
 )
 
+Write-Output ("Running script on: " + $env:computername)
 #Connect to Azure with the identity of the automation account
 try {
     Write-Output ("Connecting to Azure Account...")

@@ -164,7 +164,7 @@ catch {
     exit(1)
     Break
 }
-Write-Output("Collected worksace key")
+Write-Output("Collected workspace key")
 
 Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
     $provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running

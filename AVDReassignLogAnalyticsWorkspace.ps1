@@ -64,34 +64,6 @@ Param (
 	[String] $Extension = "MicrosoftMonitoringAgent"
 )
 
-Write-Output ("Running script on: " + $env:computername)
-#Connect to Azure with the identity of the automation account
-try {
-    Write-Output ("Connecting to Azure Account...")
-    Connect-AzAccount `
-    -Identity `
-    -SubscriptionId $Subscription `
-    -ErrorAction Stop| Out-Null 
-}
-catch {
-    $ErrorMessage = $PSItem.Exception.message
-    Write-Error ("Could not connect to Azure Account: "+$ErrorMessage)
-    exit(1)
-    Break
-}
-
-#Get workspace key from keyvault
-try {
-    Write-Output ("Collecting workspace key...")
-	$WorkspaceKey = Get-AzKeyVaultSecret -ResourceId $KeyvaultID -Name $KvWorkspaceKey -AsPlainText 
-}
-catch {
-    $ErrorMessage = $PSItem.Exception.message
-    Write-Error ("Could not collect workspace key: "+$ErrorMessage)
-    exit(1)
-    Break
-}
-
 function Reassign-VM
 {
     [CmdletBinding()]
@@ -165,6 +137,34 @@ function Check-LAWAssignment
     return $IsConnected
 }
 
+Write-Output ("Running script on: " + $env:computername)
+#Connect to Azure with the identity of the automation account
+try {
+    Write-Output ("Connecting to Azure Account...")
+    Connect-AzAccount `
+    -Identity `
+    -SubscriptionId $Subscription `
+    -ErrorAction Stop| Out-Null 
+}
+catch {
+    $ErrorMessage = $PSItem.Exception.message
+    Write-Error ("Could not connect to Azure Account: "+$ErrorMessage)
+    exit(1)
+    Break
+}
+
+#Get workspace key from keyvault
+try {
+    Write-Output ("Collecting workspace key...")
+	$WorkspaceKey = Get-AzKeyVaultSecret -ResourceId $KeyvaultID -Name $KvWorkspaceKey -AsPlainText 
+}
+catch {
+    $ErrorMessage = $PSItem.Exception.message
+    Write-Error ("Could not collect workspace key: "+$ErrorMessage)
+    exit(1)
+    Break
+}
+Write-Output("Collected worksace key")
 
 Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
     $provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running

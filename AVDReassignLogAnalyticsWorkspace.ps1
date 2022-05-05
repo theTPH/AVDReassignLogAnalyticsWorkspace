@@ -137,6 +137,7 @@ function Check-LAWAssignment
     return $IsConnected
 }
 
+$errorActionPreference = "Stop"
 Write-Output ("Running script on: " + $env:computername)
 #Connect to Azure with the identity of the automation account
 try {

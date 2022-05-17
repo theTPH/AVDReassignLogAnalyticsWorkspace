@@ -1,10 +1,11 @@
 # AVDReassignLogAnalyticsWorkspace
 
 .SYNOPSIS  
-    Checks if all AVD VMs in a Ressourcegroup are connected to the right LogAnalyticsWorkspace(LAW) and reassigns them if needed.  
+    Checks if all AVD VMs in a Hostpool are connected to the right LogAnalyticsWorkspace(LAW) and reassigns them if needed.    
 .DESCRIPTION  
-	THis script checks if all VMs in the supplied Ressourcegroup are connected to the correct LAW. If not it reassignes them to the correct LAW.   
+	This script checks if all VMs in the supplied Hostpool are connected to the correct LAW. If not it reassignes them to the correct LAW. 
 	If a machine is not running it is put into maintenance mode, started, reassigned, stoped and then put out of maintenance mode.  
+	If there are VMs in the supplied ressource group that are not part of the hostpool they will be skipped for LAW reassignment.  
 	This script is meant to be run in an Azure Runbook. The script will use the AutomationAccount System Identity for Authentication.  
 	Therefore the System Identity needs the following RBAC rigths in the Azure tennant:  
 		- Read on KeyVault

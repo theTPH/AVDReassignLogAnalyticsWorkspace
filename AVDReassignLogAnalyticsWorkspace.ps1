@@ -1,9 +1,10 @@
 <#
 .SYNOPSIS
-    Checks if all AVD VMs in a Ressourcegroup are connected to the right LogAnalyticsWorkspace(LAW) and reassigns them if needed.
+    Checks if all AVD VMs in a Hostpool are connected to the right LogAnalyticsWorkspace(LAW) and reassigns them if needed.
 .DESCRIPTION
-	THis script checks if all VMs in the supplied Ressourcegroup are connected to the correct LAW. If not it reassignes them to the correct LAW. 
+	This script checks if all VMs in the supplied Hostpool are connected to the correct LAW. If not it reassignes them to the correct LAW. 
 	If a machine is not running it is put into maintenance mode, started, reassigned, stoped and then put out of maintenance mode.
+	If there are VMs in the supplied ressource group that are not part of the hostpool they will be skipped for LAW reassignment.
 	This script is meant to be run in an Azure Runbook. The script will use the AutomationAccount System Identity for Authentication. 
 	Therefore the System Identity needs the following RBAC rigths in the Azure tennant:
 		- Read on KeyVault
@@ -69,22 +70,22 @@ function Reassign-VM
     [CmdletBinding()]
    	Param(
        	[Parameter(Mandatory)]
-        [string]$VMName,
+        [String]$VMName,
        
    	    [Parameter(Mandatory)]
-       	[string]$ResourceGroupName,
+       	[String]$ResourceGroupName,
        
         [Parameter(Mandatory)]
-   	    [string]$Location,
+   	    [String]$Location,
 
         [Parameter(Mandatory)]
-   	    [string]$Extension,
+   	    [String]$Extension,
 
         [Parameter(Mandatory)]
-   	    [string]$WorkspaceID,
+   	    [String]$WorkspaceID,
 
         [Parameter(Mandatory)]
-   	    [string]$WorkspaceKey
+   	    [String]$WorkspaceKey
    	)
 
     Write-Output("Removing " + $VMName + " from old workspace")
@@ -133,8 +134,28 @@ function Check-LAWAssignment
             $IsConnected = $true
         }
     }
-
     return $IsConnected
+}
+
+function Create-AVDHostList
+{
+    [CmdletBinding()]
+   	Param(
+       	[Parameter(Mandatory)]
+        [string]$HostpoolResourceGroupName,
+       
+   	    [Parameter(Mandatory)]
+       	[string]$HostPoolName
+   	)
+	$AVDHostList = @()
+	$AVDHosts = Get-AzWvdSessionHost -ResourceGroupName $HostpoolResourceGroupName -HostPoolName $HostPoolName
+	foreach ($Item in $AVDHosts)
+	{
+		$HostName = $Item.Name.Split("/")[1]
+		$AVDHostList += $HostName
+	}
+
+	return $AVDHostList
 }
 
 $errorActionPreference = "Stop"
@@ -167,42 +188,51 @@ catch {
 }
 Write-Output("Collected workspace key")
 
-Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
-    $provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running
-    $IsConnected = Check-LAWAssignment -LAWResourceGroup $LAWResourceGroup -LAWName $LAWName -ExtensionName $Extension -VMName $_.Name -VMResourceGroup $_.ResourceGroupName
-    if($IsConnected -eq $false)
-    {
-        Write-Output("VM $($_.Name) is not connected to the correct LogAnalyticsWorkspace")
-        if ($provisioningState -eq "PowerState/running")
-        {
-			#If the VM is running it gets reassigned to the new LAW
-            Write-Output("VM " + $_.Name + " is running")
-            Write-Output("Reassigning VM $($_.Name)")
-            Reassign-VM -VMName $_.Name -ResourceGroupName $_.ResourceGroupName  -Location $_.Location -Extension $Extension -WorkspaceID $WorkspaceID -WorkspaceKey $WorkspaceKey
+$AVDHostList = Create-AVDHostList -HostPoolName $HostPoolName -HostpoolResourceGroupName $HostpoolRessourceGroup
+Write-Output("Created list of all AVD Hosts. Found " + $AVDHostList.count + " hosts.")
 
-        }
-        elseif ($provisioningState -eq "PowerState/deallocated")
-        {
-			#If the VM is not running it is-
-            Write-Output("VM " + $_.Name + " is deallocated, putting it into drain mode")
-            $VMFullName = $_.Name + ".aaddsrtlgroup.com"
-            Update-AzWvdSessionHost -HostPoolName $Hostpoolname -ResourceGroupName $HostpoolRessourceGroup -Name $VMFullName -AllowNewSession:$false # -put into maintenance mode
-            Write-Output("Starting VM $($_.Name)")
-            Start-AzVM -Name $_.Name -ResourceGroupName $_.ResourceGroupName # -started
-            $provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code
-            Write-Output("Reassigning VM $($_.Name)")
-            Reassign-VM -VMName $_.Name -ResourceGroupName $_.ResourceGroupName  -Location $_.Location -Extension $Extension -WorkspaceID $WorkspaceID -WorkspaceKey $WorkspaceKey # -reassigned
-            Write-Output("Stopping VM $($_.Name) and oull it out of drain mode")
-            Stop-AzVM -Name $_.Name -ResourceGroupName $_.ResourceGroupName -Force # -stopped
-            Update-AzWvdSessionHost -HostPoolName $Hostpoolname -ResourceGroupName $HostpoolRessourceGroup -Name $VMFullName -AllowNewSession:$true # -put out of maintenance mode
-        }
-        else
-        {
-			#All other provisioning states like "deallocating" are currently not handeld in this script
-           Write-Warning("VM " + $_.Name + " is in unknown provisioning state " + $provisioningState)
-        }
-    }else{
-		#No action is taken if the VM is already connected to the correct Workspace
-        Write-Output("VM $($_.Name) is allready connected to the correct LogAnalyticsWorkspace")
-    }
+Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
+	$VMFullName = $_.Name + ".aaddsrtlgroup.com"
+	if ($AVDHostList -contains $VMFullName) # check if the VM is part of the hostpool
+	{
+		$provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running
+		$IsConnected = Check-LAWAssignment -LAWResourceGroup $LAWResourceGroup -LAWName $LAWName -ExtensionName $Extension -VMName $_.Name -VMResourceGroup $_.ResourceGroupName
+		if($IsConnected -eq $false)
+		{
+			Write-Output("VM $($_.Name) is not connected to the correct LogAnalyticsWorkspace")
+			if ($provisioningState -eq "PowerState/running")
+			{
+				#If the VM is running it gets reassigned to the new LAW
+				Write-Output("VM " + $_.Name + " is running")
+				Write-Output("Reassigning VM $($_.Name)")
+				Reassign-VM -VMName $_.Name -ResourceGroupName $_.ResourceGroupName  -Location $_.Location -Extension $Extension -WorkspaceID $WorkspaceID -WorkspaceKey $WorkspaceKey
+
+			}
+			elseif ($provisioningState -eq "PowerState/deallocated")
+			{
+				#If the VM is not running it is-	
+				Write-Output("VM " + $_.Name + " is deallocated, putting it into drain mode")
+				Update-AzWvdSessionHost -HostPoolName $Hostpoolname -ResourceGroupName $HostpoolRessourceGroup -Name $VMFullName -AllowNewSession:$false # -put into maintenance mode
+				Write-Output("Starting VM $($_.Name)")
+				Start-AzVM -Name $_.Name -ResourceGroupName $_.ResourceGroupName # -started
+				$provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code
+				Write-Output("Reassigning VM $($_.Name)")
+				Reassign-VM -VMName $_.Name -ResourceGroupName $_.ResourceGroupName  -Location $_.Location -Extension $Extension -WorkspaceID $WorkspaceID -WorkspaceKey $WorkspaceKey # -reassigned
+				Write-Output("Stopping VM $($_.Name) and oull it out of drain mode")
+				Stop-AzVM -Name $_.Name -ResourceGroupName $_.ResourceGroupName -Force # -stopped
+				Update-AzWvdSessionHost -HostPoolName $Hostpoolname -ResourceGroupName $HostpoolRessourceGroup -Name $VMFullName -AllowNewSession:$true # -put out of maintenance mode
+			}
+			else
+			{
+				#All other provisioning states like "deallocating" are currently not handeld in this script
+			Write-Warning("VM " + $_.Name + " is in unknown provisioning state " + $provisioningState)
+			}
+		}else{
+			#No action is taken if the VM is already connected to the correct Workspace
+			Write-Output("VM $($_.Name) is allready connected to the correct LogAnalyticsWorkspace")
+		}
+	}else{
+		Write-Output("VM " + $_.Name + " is not part of the hostpool and will be skipped for reassignment")
+		#If you wish to reassign VMs that are not in the hostpool too add code here
+	} 
  }

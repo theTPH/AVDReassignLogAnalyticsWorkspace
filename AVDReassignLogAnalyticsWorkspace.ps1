@@ -18,6 +18,8 @@
 		- Az.KeyVault
 .PARAMETER Subscription
 	The Subscription containig the ressources such as VMs, LAW, KeyVault, Hostpool. 
+.PARAMETER DomainName
+    DomainName name of the which is appended to the AVD session hosts after creation e.g. contoso.onmicrosoft.com
 .PARAMETER VMResourceGroup
 	The RessourceGroup that the VMs that need to be checked and reassigned are located in.
 .PARAMETER LAWName
@@ -45,6 +47,8 @@
 Param (
 	[Parameter (Mandatory = $true)]
 	[String] $Subscription,
+    [Parameter (Mandatory = $true)]
+	[String] $DomainName,
 	[Parameter (Mandatory = $true)]
 	[String] $VMResourceGroup,
 	[Parameter (Mandatory = $true)]
@@ -192,7 +196,7 @@ $AVDHostList = Create-AVDHostList -HostPoolName $HostPoolName -HostpoolResourceG
 Write-Output("Created list of all AVD Hosts. Found " + $AVDHostList.count + " hosts.")
 
 Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Object {
-	$VMFullName = $_.Name + ".aaddsrtlgroup.com"
+	$VMFullName = $_.Name + "." + $DomainName
 	if ($AVDHostList -contains $VMFullName) # check if the VM is part of the hostpool
 	{
 		$provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code #Statuscode if the machine is currently running
@@ -218,7 +222,7 @@ Get-AzVM | Where-Object{$_.ResourceGroupName -eq $VMResourceGroup} | ForEach-Obj
 				$provisioningState = (Get-AzVM -ResourceGroupName $_.ResourceGroupName  -Name $_.Name -Status).Statuses[1].Code
 				Write-Output("Reassigning VM $($_.Name)")
 				Reassign-VM -VMName $_.Name -ResourceGroupName $_.ResourceGroupName  -Location $_.Location -Extension $Extension -WorkspaceID $WorkspaceID -WorkspaceKey $WorkspaceKey # -reassigned
-				Write-Output("Stopping VM $($_.Name) and oull it out of drain mode")
+				Write-Output("Stopping VM $($_.Name) and put it out of drain mode")
 				Stop-AzVM -Name $_.Name -ResourceGroupName $_.ResourceGroupName -Force # -stopped
 				Update-AzWvdSessionHost -HostPoolName $Hostpoolname -ResourceGroupName $HostpoolRessourceGroup -Name $VMFullName -AllowNewSession:$true # -put out of maintenance mode
 			}
